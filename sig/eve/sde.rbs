@@ -1,6 +1,60 @@
-module Eve
-  module Sde
+module EVE
+  module SDE
     VERSION: String
-    # See the writing guide of rbs: https://github.com/ruby/rbs#guides
+
+    class Error < StandardError
+    end
+
+    def self.data_path: -> Pathname
+    def self.data_path=: (String | Pathname) -> Pathname
+    def self.registry: -> Hash[Symbol, String]
+    def self.const_missing: (Symbol name) -> Class
+    def self.preload!: -> void
+
+    private
+
+    def self.inflector: -> Dry::Inflector
+    def self.build_registry: -> Hash[Symbol, String]
+
+    module Types
+      LocalizedString: untyped
+    end
+
+    module Base
+      attr_reader source: Pathname
+
+      def data: -> Hash[Integer, Hash[String, untyped]]
+      def find: (Integer id) -> (Dry::Struct | Hash[String, untyped] | nil)
+      def all: -> Hash[Integer, (Dry::Struct | Hash[String, untyped])]
+      def ids: -> Array[Integer]
+      def count: -> Integer
+
+      private
+
+      def struct?: -> bool
+    end
+
+    class StructGenerator
+      LANG_KEYS: Set[String]
+      TYPES_PREFIX: String
+      TYPE_MAP: Hash[Symbol, String]
+
+      @sde_dir: Pathname
+      @output_dir: Pathname
+      @inflector: Dry::Inflector
+
+      def initialize: (sde_dir: String | Pathname, output_dir: String | Pathname) -> void
+      def call: -> void
+
+      private
+
+      def generate_one: (String gz_path) -> void
+      def scan_schema: (Hash[Integer, untyped] data) -> [Hash[String, Set[Symbol]], Hash[String, Integer], Integer]
+      def render_struct: (String basename, String class_name, Hash[String, Set[Symbol]] schema, Hash[String, Integer] key_counts, Integer total) -> String
+      def classify: (untyped value) -> Symbol
+      def localized_string?: (Hash[untyped, untyped] hash) -> bool
+      def classify_array: (Array[untyped] arr) -> Symbol
+      def type_expr: (Set[Symbol] type_names, bool optional) -> String
+    end
   end
 end
