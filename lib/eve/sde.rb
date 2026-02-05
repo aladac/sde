@@ -20,36 +20,28 @@ module EVE
       @registry = nil
     end
 
-    # Map singular const name → plural marshal.gz basename
-    # e.g. :Type => "types", :Faction => "factions", :AgentType => "agentTypes"
     def self.registry
       @registry ||= build_registry
     end
 
     def self.const_missing(name)
       basename = registry[name]
+      return super unless basename
 
-      if basename
-        marshal_file = data_path.join("#{basename}.marshal.gz")
-        if marshal_file.exist?
-          klass = Class.new(Base)
-          klass.instance_variable_set(:@source, marshal_file)
-          const_set(name, klass)
+      marshal_file = data_path.join("#{basename}.marshal.gz")
+      return super unless marshal_file.exist?
 
-          # Auto-require matching struct file
-          begin
-            require_relative "sde/structs/#{basename}"
-          rescue LoadError
-            # No struct defined — raw hash access
-          end
-
-          klass
-        else
-          super
-        end
-      else
-        super
+      struct_file = inflector.underscore(name.to_s)
+      begin
+        require_relative "sde/structs/#{struct_file}"
+      rescue LoadError
+        const_set(name, Class.new)
       end
+
+      klass = const_get(name)
+      klass.extend(Base)
+      klass.instance_variable_set(:@source, marshal_file)
+      klass
     end
 
     def self.preload!

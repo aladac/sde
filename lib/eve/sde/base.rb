@@ -4,42 +4,35 @@ require "zlib"
 
 module EVE
   module SDE
-    class Base
-      class << self
-        attr_reader :source
-        attr_accessor :struct_class
+    module Base
+      attr_reader :source
 
-        def data
-          @data ||= Zlib::GzipReader.open(source.to_s) { |gz| Marshal.load(gz.read) }
-        end
+      def data
+        @data ||= Zlib::GzipReader.open(source.to_s) { |gz| Marshal.load(gz.read) }
+      end
 
-        def find(id)
-          raw = data[id]
-          return nil unless raw
-          wrap(raw)
-        end
+      def find(id)
+        raw = data[id]
+        return nil unless raw
+        struct? ? new(raw) : raw
+      end
 
-        def all
-          @all_wrapped ||= if struct_class
-            data.transform_values { |v| wrap(v) }
-          else
-            data
-          end
-        end
+      def all
+        @all_wrapped ||= struct? ? data.transform_values { |v| new(v) } : data
+      end
 
-        def ids
-          data.keys
-        end
+      def ids
+        data.keys
+      end
 
-        def count
-          data.size
-        end
+      def count
+        data.size
+      end
 
-        private
+      private
 
-        def wrap(hash)
-          struct_class ? struct_class.new(hash) : hash
-        end
+      def struct?
+        ancestors.include?(Dry::Struct)
       end
     end
   end
