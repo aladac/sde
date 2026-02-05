@@ -34,6 +34,7 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency "dry-struct", "~> 1.6"
   spec.add_dependency "msgpack", "~> 1.7"
+  spec.add_dependency "tqdm", "~> 0.4"
 
   # For more information and examples about making a new gem, check out our
   # guide at: https://bundler.io/guides/creating_gem.html

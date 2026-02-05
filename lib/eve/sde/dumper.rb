@@ -6,6 +6,7 @@ require "msgpack"
 require "benchmark"
 require "fileutils"
 require "dry/inflector"
+require "tqdm"
 
 class EVE::SDE::Dumper
   def initialize(yaml_dir:, sde_dir:)
@@ -21,7 +22,7 @@ class EVE::SDE::Dumper
     yaml_files = Dir[@yaml_dir.join("**/*.yaml")].sort
     stats = {yaml: 0, gz: 0, written: 0, skipped: []}
 
-    yaml_files.each { |path| dump_one(path, stats) }
+    yaml_files.tqdm(desc: "Dumping YAML", leave: true).each { |path| dump_one(path, stats) }
     print_summary(stats)
   end
 

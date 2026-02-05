@@ -4,6 +4,7 @@ require "zlib"
 require "msgpack"
 require "pathname"
 require "dry/inflector"
+require "tqdm"
 
 class EVE::SDE::StructGenerator
   LANG_KEYS = Set.new(%w[de en es fr it ja ko ru zh]).freeze
@@ -35,7 +36,7 @@ class EVE::SDE::StructGenerator
     gz_files = Dir[@sde_dir.join("*.msgpack.gz")].sort
     abort "No .msgpack.gz files in #{@sde_dir}. Run `rake sde:dump` first." if gz_files.empty?
 
-    gz_files.each { |path| generate_one(path) }
+    gz_files.tqdm(desc: "Generating structs", leave: true).each { |path| generate_one(path) }
     puts "Generated #{gz_files.size} struct files in #{@output_dir}"
   end
 
