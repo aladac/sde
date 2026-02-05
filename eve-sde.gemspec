@@ -16,8 +16,8 @@ Gem::Specification.new do |spec|
 
   spec.metadata["allowed_push_host"] = "https://rubygems.pkg.github.com/aladac"
   spec.metadata["homepage_uri"] = spec.homepage
-  spec.metadata["source_code_uri"] = "https://github.com/aladac/eve-sde"
-  spec.metadata["changelog_uri"] = "https://github.com/aladac/eve-sde/blob/main/CHANGELOG.md"
+  spec.metadata["source_code_uri"] = "#{spec.homepage}/tree/main"
+  spec.metadata["changelog_uri"] = "#{spec.homepage}/blob/main/CHANGELOG.md"
 
   # Specify which files should be added to the gem when it is released.
   # The `git ls-files -z` loads the files in the RubyGem that have been added into git.
@@ -35,7 +35,11 @@ Gem::Specification.new do |spec|
   spec.add_dependency "dry-struct", "~> 1.6"
   spec.add_dependency "msgpack", "~> 1.7"
   spec.add_dependency "tqdm", "~> 0.4"
+  spec.add_dependency "benchmark", "~> 0.5"
 
-  # For more information and examples about making a new gem, check out our
-  # guide at: https://bundler.io/guides/creating_gem.html
+  spec.add_development_dependency "irb"
+  spec.add_development_dependency "rake", "~> 13.0"
+  spec.add_development_dependency "rspec", "~> 3.0"
+  spec.add_development_dependency "standard", "~> 1.3"
+  spec.add_development_dependency "simplecov"
 end

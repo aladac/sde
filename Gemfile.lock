@@ -2,6 +2,7 @@ PATH
   remote: .
   specs:
     eve-sde (0.1.0)
+      benchmark (~> 0.5)
       dry-struct (~> 1.6)
       msgpack (~> 1.7)
       tqdm (~> 0.4)
@@ -134,11 +135,8 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
-  benchmark (~> 0.5.0)
-  dry-struct (~> 1.6)
   eve-sde!
   irb
-  msgpack (~> 1.7)
   rake (~> 13.0)
   rspec (~> 3.0)
   simplecov
