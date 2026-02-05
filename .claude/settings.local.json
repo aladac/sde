@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__mcp-server-github__push_files",
+      "WebFetch(domain:dry-rb.org)",
+      "WebFetch(domain:makisushi.io)",
+      "WebFetch(domain:hanamimastery.com)"
+    ]
+  }
+}

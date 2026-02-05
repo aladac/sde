@@ -1,0 +1,273 @@
+# frozen_string_literal: true
+
+require "bundler/gem_tasks"
+require "rspec/core/rake_task"
+require "pathname"
+require "yaml"
+require "fileutils"
+require "zlib"
+
+RSpec::Core::RakeTask.new(:spec)
+
+require "standard/rake"
+
+task default: %i[spec standard]
+
+SDE_DIR = Pathname.new("./sde")
+SDE_YAML_URL = "https://developers.eveonline.com/static-data/tranquility/eve-online-static-data-3193062-yaml.zip"
+YAML_DIR = Pathname.new("./tmp/sde_yaml")
+
+namespace :sde do
+  desc "Download SDE YAML zip from EVE developers"
+  task :download do
+    require "net/http"
+    require "uri"
+
+    zip_path = Pathname.new("./tmp/sde.zip")
+    FileUtils.mkdir_p(zip_path.dirname)
+    FileUtils.mkdir_p(YAML_DIR)
+
+    puts "Downloading #{SDE_YAML_URL}..."
+    uri = URI(SDE_YAML_URL)
+
+    Net::HTTP.start(uri.host, uri.port, use_ssl: true) do |http|
+      request = Net::HTTP::Get.new(uri)
+      http.request(request) do |response|
+        case response
+        when Net::HTTPRedirection
+          uri = URI(response["location"])
+          raise "Redirect to #{uri} — re-run or update URL"
+        when Net::HTTPSuccess
+          total = response["content-length"]&.to_i
+          downloaded = 0
+          File.open(zip_path, "wb") do |f|
+            response.read_body do |chunk|
+              f.write(chunk)
+              downloaded += chunk.size
+              if total
+                print "\r  #{(downloaded * 100.0 / total).round(1)}% (#{(downloaded / 1048576.0).round(1)}MB)"
+              else
+                print "\r  #{(downloaded / 1048576.0).round(1)}MB"
+              end
+            end
+          end
+          puts
+        else
+          abort "Download failed: #{response.code} #{response.message}"
+        end
+      end
+    end
+
+    puts "Extracting to #{YAML_DIR}..."
+    system("unzip", "-o", "-q", zip_path.to_s, "-d", YAML_DIR.to_s) || abort("unzip failed")
+    puts "Done. YAML files in #{YAML_DIR}"
+  end
+
+  desc "Dump SDE YAML files to compressed Marshal format"
+  task :dump do
+    require "benchmark"
+
+    yaml_dir = YAML_DIR
+    unless yaml_dir.exist?
+      abort "No YAML files found at #{yaml_dir}. Run `rake sde:download` first."
+    end
+
+    FileUtils.mkdir_p(SDE_DIR)
+
+    yaml_files = Dir[yaml_dir.join("**/*.yaml")].sort
+    total_yaml = 0
+    total_marshal = 0
+    written = 0
+    skipped = []
+
+    yaml_files.each do |yaml_path|
+      basename = File.basename(yaml_path, ".yaml")
+      gz_path = SDE_DIR.join("#{basename}.marshal.gz")
+
+      data = nil
+      yt = Benchmark.realtime { data = YAML.load_file(yaml_path) }
+
+      unless data.is_a?(Hash) && data.keys.first.is_a?(Integer)
+        skipped << basename
+        next
+      end
+
+      marshaled = Marshal.dump(data)
+      Zlib::GzipWriter.open(gz_path.to_s) { |gz| gz.write(marshaled) }
+      written += 1
+
+      yaml_size = File.size(yaml_path)
+      gz_size = File.size(gz_path)
+      total_yaml += yaml_size
+      total_marshal += gz_size
+
+      puts "%-35s %8s → %8s (%2d%%)  parsed in %6.0fms" % [
+        basename,
+        "#{(yaml_size / 1024.0).round}K",
+        "#{(gz_size / 1024.0).round}K",
+        (gz_size * 100.0 / yaml_size).round,
+        yt * 1000
+      ]
+    end
+
+    puts
+    puts "Skipped (non-integer keys): #{skipped.join(", ")}" if skipped.any?
+    puts "Total: #{(total_yaml / 1048576.0).round(1)}MB YAML → #{(total_marshal / 1048576.0).round(1)}MB Marshal.gz"
+    puts "Wrote #{written} files to #{SDE_DIR}"
+  end
+
+  desc "Generate dry-struct definitions from marshal data"
+  task :generate_structs do
+    require "dry/inflector"
+
+    inflector = Dry::Inflector.new
+    structs_dir = Pathname.new("lib/eve/sde/structs")
+    FileUtils.mkdir_p(structs_dir)
+
+    gz_files = Dir[SDE_DIR.join("*.marshal.gz")].sort
+
+    if gz_files.empty?
+      abort "No .marshal.gz files found in #{SDE_DIR}. Run `rake sde:dump` first."
+    end
+
+    # Known set of EVE localization language keys
+    lang_keys = Set.new(%w[de en es fr it ja ko ru zh])
+
+    gz_files.each do |gz_path|
+      basename = File.basename(gz_path, ".marshal.gz")
+      data = Zlib::GzipReader.open(gz_path) { |gz| Marshal.load(gz.read) }
+
+      # Build unified schema from ALL entries
+      schema = {}       # key => Set of ruby class names
+      key_counts = {}   # key => count of entries that have it
+      total = data.size
+
+      data.each_value do |entry|
+        next unless entry.is_a?(Hash)
+
+        entry.each do |key, value|
+          key = key.to_s
+          schema[key] ||= Set.new
+          key_counts[key] ||= 0
+          key_counts[key] += 1
+          schema[key] << classify_value(value, lang_keys)
+        end
+      end
+
+      next if schema.empty?
+
+      struct_class_name = inflector.camelize(inflector.singularize(basename))
+
+      lines = []
+      lines << "# frozen_string_literal: true"
+      lines << ""
+      lines << "# Auto-generated by rake sde:generate_structs"
+      lines << "# Source: sde/#{basename}.marshal.gz (#{total} entries)"
+      lines << ""
+      lines << "require \"dry-struct\""
+      lines << "require_relative \"../types\""
+      lines << ""
+      lines << "module EVE::SDE::Structs"
+      lines << "  class #{struct_class_name} < Dry::Struct"
+      lines << "    transform_keys(&:to_sym)"
+      lines << ""
+
+      schema.keys.sort.each do |key|
+        type_names = schema[key]
+        optional = key_counts[key] < total
+        type_expr = build_type_expr(type_names, optional)
+        lines << "    attribute :#{key}, #{type_expr}"
+      end
+
+      lines << "  end"
+      lines << "end"
+      lines << ""
+
+      # Write struct file
+      struct_path = structs_dir.join("#{basename}.rb")
+      File.write(struct_path, lines.join("\n"))
+
+      # Wire up struct_class on the singular Base subclass
+      # e.g. EVE::SDE::Type.struct_class = EVE::SDE::Structs::Type
+      singular_const = struct_class_name
+      File.open(struct_path, "a") do |f|
+        f.puts "EVE::SDE::#{singular_const}.struct_class = EVE::SDE::Structs::#{struct_class_name}"
+        f.puts ""
+      end
+
+      puts "  #{basename}.rb  (#{schema.size} attributes, #{total} entries)"
+    end
+
+    puts "Generated #{gz_files.size} struct files in #{structs_dir}"
+  end
+
+  desc "Download, dump, and generate structs"
+  task update: [:download, :dump, :generate_structs]
+end
+
+# --- helper methods for struct generation ---
+
+def classify_value(value, lang_keys)
+  case value
+  when Integer then :Integer
+  when Float then :Float
+  when String then :String
+  when true, false then :Bool
+  when Hash
+    if value.keys.all? { |k| lang_keys.include?(k.to_s) } && value.values.all? { |v| v.is_a?(String) }
+      :LocalizedString
+    else
+      :Hash
+    end
+  when Array
+    if value.empty?
+      :Array
+    elsif value.all? { |v| v.is_a?(Integer) }
+      :ArrayOfInteger
+    elsif value.all? { |v| v.is_a?(Float) || v.is_a?(Integer) }
+      :ArrayOfFloat
+    elsif value.all? { |v| v.is_a?(String) }
+      :ArrayOfString
+    elsif value.all? { |v| v.is_a?(Hash) }
+      :ArrayOfHash
+    else
+      :Array
+    end
+  when NilClass then :Nil
+  else :Any
+  end
+end
+
+def build_type_expr(type_names, optional)
+  # Ignore :Nil from the set — it just means the field is optional
+  type_names = type_names - [:Nil]
+  optional = true if type_names.empty?
+  type_names = [:Any] if type_names.empty?
+
+  expr = if type_names.size == 1
+    type_to_dry(type_names.first)
+  else
+    # Multiple types seen — use Any
+    "EVE::SDE::Types::Nominal::Any"
+  end
+
+  optional ? "#{expr}.optional.meta(omittable: true)" : expr
+end
+
+def type_to_dry(sym)
+  case sym
+  when :Integer        then "EVE::SDE::Types::Integer"
+  when :Float          then "EVE::SDE::Types::Float"
+  when :String         then "EVE::SDE::Types::String"
+  when :Bool           then "EVE::SDE::Types::Bool"
+  when :LocalizedString then "EVE::SDE::Types::LocalizedString"
+  when :Hash           then "EVE::SDE::Types::Hash"
+  when :Array          then "EVE::SDE::Types::Array"
+  when :ArrayOfInteger then "EVE::SDE::Types::Array.of(EVE::SDE::Types::Integer)"
+  when :ArrayOfFloat   then "EVE::SDE::Types::Array.of(EVE::SDE::Types::Float)"
+  when :ArrayOfString  then "EVE::SDE::Types::Array.of(EVE::SDE::Types::String)"
+  when :ArrayOfHash    then "EVE::SDE::Types::Array.of(EVE::SDE::Types::Hash)"
+  when :Any            then "EVE::SDE::Types::Nominal::Any"
+  else "EVE::SDE::Types::Nominal::Any"
+  end
+end
