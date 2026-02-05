@@ -26,7 +26,7 @@ jobs:
       - name: Run tests
         run: bundle exec rspec
       - name: Build gem
-        run: gem build eve-sde.gemspec
+        run: gem build sde.gemspec
       - name: Publish to RubyGems
         uses: rubygems/release-gem@v1
 
@@ -43,7 +43,7 @@ jobs:
         with:
           ruby-version: "4.0.1"
       - name: Build gem
-        run: gem build eve-sde.gemspec
+        run: gem build sde.gemspec
       - name: Publish to GitHub Packages
         run: |
           mkdir -p ~/.gem
@@ -52,4 +52,4 @@ jobs:
           :github: Bearer ${{ secrets.GITHUB_TOKEN }}
           EOF
           chmod 0600 ~/.gem/credentials
-          gem push --key github --host https://rubygems.pkg.github.com/aladac eve-sde-*.gem
+          gem push --key github --host https://rubygems.pkg.github.com/aladac sde-*.gem

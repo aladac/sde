@@ -7,13 +7,15 @@ SimpleCov.start do
   minimum_coverage line: 90, branch: 80
 end
 
-require "eve/sde"
+require "sde"
+require "sde/downloader"
+require "sde/dumper"
+require "sde/struct_generator"
 require "tmpdir"
 require "fileutils"
 
 RSpec.configure do |config|
   config.example_status_persistence_file_path = ".rspec_status"
-  config.disable_monkey_patching!
 
   config.expect_with :rspec do |c|
     c.syntax = :expect
