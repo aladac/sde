@@ -26,6 +26,7 @@ module EVE
     end
 
     def self.const_missing(name)
+      name = name.to_sym
       basename = registry[name]
       return super unless basename
 

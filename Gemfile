@@ -12,6 +12,8 @@ gem "rspec", "~> 3.0"
 
 gem "standard", "~> 1.3"
 
+gem "simplecov", require: false
+
 gem "dry-struct", "~> 1.6"
 gem "msgpack", "~> 1.7"
 

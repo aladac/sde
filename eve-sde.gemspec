@@ -8,13 +8,13 @@ Gem::Specification.new do |spec|
   spec.authors = ["Adam Ladachowski"]
   spec.email = ["adam.ladachowski@gmail.com"]
 
-  spec.summary = "TODO: Write a short summary, because RubyGems requires one."
-  spec.description = "TODO: Write a longer description or delete this line."
+  spec.summary = "Ruby library for EVE Online Static Data Export"
+  spec.description = "Provides Ruby classes and utilities for working with EVE Online's Static Data Export (SDE)"
   spec.homepage = "https://github.com/aladac/eve-sde"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.2.0"
 
-  spec.metadata["allowed_push_host"] = "TODO: Set to your gem server 'https://example.com'"
+  spec.metadata["allowed_push_host"] = "https://rubygems.pkg.github.com/aladac"
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = "https://github.com/aladac/eve-sde"
   spec.metadata["changelog_uri"] = "https://github.com/aladac/eve-sde/blob/main/CHANGELOG.md"
