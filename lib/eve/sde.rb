@@ -29,7 +29,7 @@ module EVE
       basename = registry[name]
       return super unless basename
 
-      marshal_file = data_path.join("#{basename}.marshal.gz")
+      marshal_file = data_path.join("#{basename}.msgpack.gz")
       return super unless marshal_file.exist?
 
       struct_file = inflector.underscore(name.to_s)
@@ -60,8 +60,8 @@ module EVE
 
       def build_registry
         reg = {}
-        Dir[data_path.join("*.marshal.gz")].each do |path|
-          basename = File.basename(path, ".marshal.gz")
+        Dir[data_path.join("*.msgpack.gz")].each do |path|
+          basename = File.basename(path, ".msgpack.gz")
           const_name = inflector.camelize(inflector.singularize(basename)).to_sym
           reg[const_name] = basename
         end

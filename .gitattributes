@@ -1,1 +1,1 @@
-sde/*.marshal.gz filter=lfs diff=lfs merge=lfs -text
+sde/*.msgpack.gz filter=lfs diff=lfs merge=lfs -text

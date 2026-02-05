@@ -2,13 +2,16 @@
 
 require "yaml"
 require "zlib"
+require "msgpack"
 require "benchmark"
 require "fileutils"
+require "dry/inflector"
 
 class EVE::SDE::Dumper
   def initialize(yaml_dir:, sde_dir:)
     @yaml_dir = Pathname.new(yaml_dir)
     @sde_dir = Pathname.new(sde_dir)
+    @inflector = Dry::Inflector.new
   end
 
   def call
@@ -25,17 +28,18 @@ class EVE::SDE::Dumper
   private
 
   def dump_one(yaml_path, stats)
-    basename = File.basename(yaml_path, ".yaml")
+    yaml_name = File.basename(yaml_path, ".yaml")
     data = nil
     elapsed = Benchmark.realtime { data = YAML.load_file(yaml_path) }
 
     unless data.is_a?(Hash) && data.keys.first.is_a?(Integer)
-      stats[:skipped] << basename
+      stats[:skipped] << yaml_name
       return
     end
 
-    gz_path = @sde_dir.join("#{basename}.marshal.gz")
-    Zlib::GzipWriter.open(gz_path.to_s) { |gz| gz.write(Marshal.dump(data)) }
+    basename = @inflector.underscore(yaml_name)
+    gz_path = @sde_dir.join("#{basename}.msgpack.gz")
+    Zlib::GzipWriter.open(gz_path.to_s) { |gz| gz.write(MessagePack.pack(data)) }
     stats[:written] += 1
 
     yaml_size = File.size(yaml_path)
@@ -55,7 +59,7 @@ class EVE::SDE::Dumper
   def print_summary(stats)
     puts
     puts "Skipped (non-integer keys): #{stats[:skipped].join(", ")}" if stats[:skipped].any?
-    puts "Total: #{mb(stats[:yaml])}MB YAML → #{mb(stats[:gz])}MB Marshal.gz"
+    puts "Total: #{mb(stats[:yaml])}MB YAML → #{mb(stats[:gz])}MB msgpack.gz"
     puts "Wrote #{stats[:written]} files to #{@sde_dir}"
   end
 

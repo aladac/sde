@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "zlib"
+require "msgpack"
 
 module EVE
   module SDE
@@ -8,7 +9,7 @@ module EVE
       attr_reader :source
 
       def data
-        @data ||= Zlib::GzipReader.open(source.to_s) { |gz| Marshal.load(gz.read) }
+        @data ||= Zlib::GzipReader.open(source.to_s) { |gz| MessagePack.unpack(gz.read) }
       end
 
       def find(id)
