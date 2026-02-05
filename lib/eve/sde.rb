@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "pathname"
+require "dry-struct"
 require "dry/inflector"
 
 require_relative "sde/version"
