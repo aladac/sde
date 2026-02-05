@@ -1,34 +1,70 @@
 # SDE
 
-TODO: Delete this and the text below, and describe your gem
-
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/sde`. To experiment with that code, run `bin/console` for an interactive prompt.
+Ruby library for EVE Online's Static Data Export. Provides typed structs and lazy-loading access to all 53 SDE data collections via compressed MessagePack files.
 
 ## Installation
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
+Add to your Gemfile:
 
-Install the gem and add to the application's Gemfile by executing:
-
-```bash
-bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+```ruby
+gem "sde"
 ```
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+Or install directly:
 
 ```bash
-gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+gem install sde
 ```
 
 ## Usage
 
-TODO: Write usage instructions here
+```ruby
+require "sde"
+
+# Look up a type by ID
+tritanium = SDE::Type.find(34)
+tritanium.name["en"]   # => "Tritanium"
+tritanium.groupID      # => 18
+tritanium.volume       # => 0.01
+
+# Browse all entries
+SDE::Faction.count     # => 52
+SDE::Faction.ids       # => [500001, 500002, ...]
+SDE::Faction.all       # => {500001 => #<SDE::Faction ...>, ...}
+
+# Collections are auto-discovered and lazy-loaded
+SDE.registry.keys      # => [:AgentType, :Blueprint, :Category, :Type, ...]
+SDE.preload!           # force-load all 53 collections
+```
+
+Each collection exposes the same interface via `SDE::Base`:
+
+| Method  | Returns                             |
+|---------|-------------------------------------|
+| `.find(id)` | Single struct instance or `nil` |
+| `.all`       | `Hash{Integer => struct}`      |
+| `.ids`       | `Array[Integer]`               |
+| `.count`     | `Integer`                      |
+| `.data`      | Raw `Hash` from MessagePack    |
+
+## Data pipeline
+
+Rake tasks to download, convert, and generate struct definitions from the official SDE YAML export:
+
+```bash
+rake sde:download         # Download SDE YAML zip
+rake sde:dump             # Convert YAML to msgpack.gz
+rake sde:generate_structs # Generate Dry::Struct definitions
+rake sde:update           # Run all three steps
+```
 
 ## Development
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
-
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
+```bash
+bin/setup       # Install dependencies
+bundle exec rspec # Run tests (240 examples)
+bin/console     # Interactive console with SDE loaded
+```
 
 ## Contributing
 
