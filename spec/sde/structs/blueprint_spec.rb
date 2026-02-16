@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
 describe SDE::Blueprint do
-  it "loads blueprints" do
+  it 'loads blueprints' do
     expect(described_class.count).to be > 5000
   end
 
-  it "has activities hash and type ID" do
+  it 'has activities hash and type ID' do
     bp = described_class.find(described_class.ids.first)
     expect(bp).to be_a(described_class)
     expect(bp.activities).to be_a(Hash)

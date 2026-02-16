@@ -1,131 +1,134 @@
 # frozen_string_literal: true
 
-require "zlib"
-require "msgpack"
-require "pathname"
-require "dry/inflector"
-require "tqdm"
+require 'zlib'
+require 'msgpack'
+require 'pathname'
+require 'dry/inflector'
+require 'tqdm'
 
-class SDE::StructGenerator
-  LANG_KEYS = Set.new(%w[de en es fr it ja ko ru zh]).freeze
-  TYPES_PREFIX = "SDE::Types"
+module SDE
+  class StructGenerator
+    LANG_KEYS = Set.new(%w[de en es fr it ja ko ru zh]).freeze
+    TYPES_PREFIX = 'SDE::Types'
 
-  TYPE_MAP = {
-    Integer: "#{TYPES_PREFIX}::Integer",
-    Float: "#{TYPES_PREFIX}::Float",
-    String: "#{TYPES_PREFIX}::String",
-    Bool: "#{TYPES_PREFIX}::Bool",
-    LocalizedString: "#{TYPES_PREFIX}::LocalizedString",
-    Hash: "#{TYPES_PREFIX}::Hash",
-    Array: "#{TYPES_PREFIX}::Array",
-    ArrayOfInteger: "#{TYPES_PREFIX}::Array.of(#{TYPES_PREFIX}::Integer)",
-    ArrayOfFloat: "#{TYPES_PREFIX}::Array.of(#{TYPES_PREFIX}::Float)",
-    ArrayOfString: "#{TYPES_PREFIX}::Array.of(#{TYPES_PREFIX}::String)",
-    ArrayOfHash: "#{TYPES_PREFIX}::Array.of(#{TYPES_PREFIX}::Hash)",
-    Any: "#{TYPES_PREFIX}::Nominal::Any"
-  }.freeze
+    TYPE_MAP = {
+      Integer: "#{TYPES_PREFIX}::Integer",
+      Float: "#{TYPES_PREFIX}::Float",
+      String: "#{TYPES_PREFIX}::String",
+      Bool: "#{TYPES_PREFIX}::Bool",
+      LocalizedString: "#{TYPES_PREFIX}::LocalizedString",
+      Hash: "#{TYPES_PREFIX}::Hash",
+      Array: "#{TYPES_PREFIX}::Array",
+      ArrayOfInteger: "#{TYPES_PREFIX}::Array.of(#{TYPES_PREFIX}::Integer)",
+      ArrayOfFloat: "#{TYPES_PREFIX}::Array.of(#{TYPES_PREFIX}::Float)",
+      ArrayOfString: "#{TYPES_PREFIX}::Array.of(#{TYPES_PREFIX}::String)",
+      ArrayOfHash: "#{TYPES_PREFIX}::Array.of(#{TYPES_PREFIX}::Hash)",
+      Any: "#{TYPES_PREFIX}::Nominal::Any"
+    }.freeze
 
-  def initialize(sde_dir:, output_dir:)
-    @sde_dir = Pathname.new(sde_dir)
-    @output_dir = Pathname.new(output_dir)
-    @inflector = Dry::Inflector.new
-  end
+    def initialize(sde_dir:, output_dir:)
+      @sde_dir = Pathname.new(sde_dir)
+      @output_dir = Pathname.new(output_dir)
+      @inflector = Dry::Inflector.new
+    end
 
-  def call
-    FileUtils.mkdir_p(@output_dir)
-    gz_files = Dir[@sde_dir.join("*.msgpack.gz")].sort
-    abort "No .msgpack.gz files in #{@sde_dir}. Run `rake sde:dump` first." if gz_files.empty?
+    def call
+      FileUtils.mkdir_p(@output_dir)
+      gz_files = Dir[@sde_dir.join('*.msgpack.gz')].sort
+      abort "No .msgpack.gz files in #{@sde_dir}. Run `rake sde:dump` first." if gz_files.empty?
 
-    gz_files.tqdm(desc: "Generating structs", leave: true).each { |path| generate_one(path) }
-    puts "Generated #{gz_files.size} struct files in #{@output_dir}"
-  end
+      gz_files.tqdm(desc: 'Generating structs', leave: true).each { |path| generate_one(path) }
+      puts "Generated #{gz_files.size} struct files in #{@output_dir}"
+    end
 
-  private
+    private
 
-  def generate_one(gz_path)
-    basename = File.basename(gz_path, ".msgpack.gz")
-    data = Zlib::GzipReader.open(gz_path) { |gz| MessagePack.unpack(gz.read) }
-    schema, key_counts, total = scan_schema(data)
-    return if schema.empty?
+    def generate_one(gz_path)
+      basename = File.basename(gz_path, '.msgpack.gz')
+      data = Zlib::GzipReader.open(gz_path) { |gz| MessagePack.unpack(gz.read) }
+      schema, key_counts, total = scan_schema(data)
+      return if schema.empty?
 
-    class_name = @inflector.camelize(@inflector.singularize(basename))
-    filename = @inflector.underscore(class_name)
-    source = render_struct(basename, class_name, schema, key_counts, total)
-    File.write(@output_dir.join("#{filename}.rb"), source)
-    puts "  #{filename}.rb  (#{schema.size} attributes, #{total} entries)"
-  end
+      class_name = @inflector.camelize(@inflector.singularize(basename))
+      filename = @inflector.underscore(class_name)
+      source = render_struct(basename, class_name, schema, key_counts, total)
+      File.write(@output_dir.join("#{filename}.rb"), source)
+      puts "  #{filename}.rb  (#{schema.size} attributes, #{total} entries)"
+    end
 
-  def scan_schema(data)
-    schema = {}
-    key_counts = Hash.new(0)
+    def scan_schema(data)
+      schema = {}
+      key_counts = Hash.new(0)
 
-    data.each_value do |entry|
-      next unless entry.is_a?(::Hash)
+      data.each_value do |entry|
+        next unless entry.is_a?(::Hash)
 
-      entry.each do |key, value|
-        key = key.to_s
-        (schema[key] ||= Set.new) << classify(value)
-        key_counts[key] += 1
+        entry.each do |key, value|
+          key = key.to_s
+          (schema[key] ||= Set.new) << classify(value)
+          key_counts[key] += 1
+        end
+      end
+
+      [schema, key_counts, data.size]
+    end
+
+    def render_struct(basename, class_name, schema, key_counts, total)
+      attrs = schema.keys.sort.map do |key|
+        optional = key_counts[key] < total
+        sym = key.match?(/\A\d/) ? ":\"#{key}\"" : ":#{key}"
+        "  attribute #{sym}, #{type_expr(schema[key], optional)}"
+      end
+
+      <<~RUBY
+        # frozen_string_literal: true
+
+        # Auto-generated by rake sde:generate_structs
+        # Source: sde/#{basename}.msgpack.gz (#{total} entries)
+
+        class SDE::#{class_name} < Dry::Struct
+          transform_keys(&:to_sym)
+
+        #{attrs.join("\n")}
+        end
+      RUBY
+    end
+
+    def classify(value)
+      case value
+      when Integer then :Integer
+      when Float then :Float
+      when ::String then :String
+      when true, false then :Bool
+      when NilClass then :Nil
+      when ::Hash then localized_string?(value) ? :LocalizedString : :Hash
+      when ::Array then classify_array(value)
+      else :Any
       end
     end
 
-    [schema, key_counts, data.size]
-  end
-
-  def render_struct(basename, class_name, schema, key_counts, total)
-    attrs = schema.keys.sort.map do |key|
-      optional = key_counts[key] < total
-      sym = key.match?(/\A\d/) ? ":\"#{key}\"" : ":#{key}"
-      "  attribute #{sym}, #{type_expr(schema[key], optional)}"
+    def localized_string?(hash)
+      hash.keys.all? { |k| LANG_KEYS.include?(k.to_s) } &&
+        hash.values.all? { |v| v.is_a?(::String) }
     end
 
-    <<~RUBY
-      # frozen_string_literal: true
+    def classify_array(arr)
+      return :Array if arr.empty?
+      return :ArrayOfInteger if arr.all? { |v| v.is_a?(Integer) }
+      return :ArrayOfFloat if arr.all? { |v| v.is_a?(Float) || v.is_a?(Integer) }
+      return :ArrayOfString if arr.all? { |v| v.is_a?(::String) }
+      return :ArrayOfHash if arr.all? { |v| v.is_a?(::Hash) }
 
-      # Auto-generated by rake sde:generate_structs
-      # Source: sde/#{basename}.msgpack.gz (#{total} entries)
-
-      class SDE::#{class_name} < Dry::Struct
-        transform_keys(&:to_sym)
-
-      #{attrs.join("\n")}
-      end
-    RUBY
-  end
-
-  def classify(value)
-    case value
-    when Integer then :Integer
-    when Float then :Float
-    when ::String then :String
-    when true, false then :Bool
-    when NilClass then :Nil
-    when ::Hash then localized_string?(value) ? :LocalizedString : :Hash
-    when ::Array then classify_array(value)
-    else :Any
+      :Array
     end
-  end
 
-  def localized_string?(hash)
-    hash.keys.all? { |k| LANG_KEYS.include?(k.to_s) } &&
-      hash.values.all? { |v| v.is_a?(::String) }
-  end
+    def type_expr(type_names, optional)
+      type_names -= [:Nil]
+      optional = true if type_names.empty?
+      type_names = [:Any] if type_names.empty?
 
-  def classify_array(arr)
-    return :Array if arr.empty?
-    return :ArrayOfInteger if arr.all? { |v| v.is_a?(Integer) }
-    return :ArrayOfFloat if arr.all? { |v| v.is_a?(Float) || v.is_a?(Integer) }
-    return :ArrayOfString if arr.all? { |v| v.is_a?(::String) }
-    return :ArrayOfHash if arr.all? { |v| v.is_a?(::Hash) }
-    :Array
-  end
-
-  def type_expr(type_names, optional)
-    type_names -= [:Nil]
-    optional = true if type_names.empty?
-    type_names = [:Any] if type_names.empty?
-
-    expr = (type_names.size == 1) ? TYPE_MAP.fetch(type_names.first) : TYPE_MAP[:Any]
-    optional ? "#{expr}.optional.meta(omittable: true)" : expr
+      expr = type_names.size == 1 ? TYPE_MAP.fetch(type_names.first) : TYPE_MAP[:Any]
+      optional ? "#{expr}.optional.meta(omittable: true)" : expr
+    end
   end
 end

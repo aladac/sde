@@ -1,18 +1,18 @@
 # frozen_string_literal: true
 
-require "pathname"
-require "dry-struct"
-require "dry/inflector"
+require 'pathname'
+require 'dry-struct'
+require 'dry/inflector'
 
-require_relative "sde/version"
-require_relative "sde/types"
-require_relative "sde/base"
+require_relative 'sde/version'
+require_relative 'sde/types'
+require_relative 'sde/base'
 
 module SDE
   class Error < StandardError; end
 
   def self.data_path
-    @data_path ||= Pathname.new(__dir__).join("..", "sde")
+    @data_path ||= Pathname.new(__dir__).join('..', 'sde')
   end
 
   def self.data_path=(path)
@@ -60,8 +60,8 @@ module SDE
 
     def build_registry
       reg = {}
-      Dir[data_path.join("*.msgpack.gz")].each do |path|
-        basename = File.basename(path, ".msgpack.gz")
+      Dir[data_path.join('*.msgpack.gz')].each do |path|
+        basename = File.basename(path, '.msgpack.gz')
         const_name = inflector.camelize(inflector.singularize(basename)).to_sym
         reg[const_name] = basename
       end

@@ -1,21 +1,21 @@
 # frozen_string_literal: true
 
-require "simplecov"
+require 'simplecov'
 SimpleCov.start do
-  add_filter "/spec/"
+  add_filter '/spec/'
   enable_coverage :branch
   minimum_coverage line: 90, branch: 80
 end
 
-require "sde"
-require "sde/downloader"
-require "sde/dumper"
-require "sde/struct_generator"
-require "tmpdir"
-require "fileutils"
+require 'sde'
+require 'sde/downloader'
+require 'sde/dumper'
+require 'sde/struct_generator'
+require 'tmpdir'
+require 'fileutils'
 
 RSpec.configure do |config|
-  config.example_status_persistence_file_path = ".rspec_status"
+  config.example_status_persistence_file_path = '.rspec_status'
 
   config.expect_with :rspec do |c|
     c.syntax = :expect
